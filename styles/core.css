@@ -231,8 +231,6 @@ ol, ul { padding: 0; list-style: none; }
   -webkit-tap-highlight-color: transparent;
 }
 
-.badge:hover { border-color: var(--ink-faint); }
-
 .badge__dot {
   width: 7px;
   height: 7px;
@@ -243,6 +241,12 @@ ol, ul { padding: 0; list-style: none; }
 .badge[data-backend="gpu"] { border-color: var(--red); color: var(--red); }
 .badge[data-backend="gpu"] .badge__dot { background: var(--red); }
 .badge[data-backend="cpu"] .badge__dot { background: var(--ink-soft); }
+
+/* After the state rules, and matched per state: the backend colour is set at
+   the same specificity, so a single .badge:hover would lose to it and the
+   badge would look dead on hover in exactly the state it is usually in. */
+.badge:hover { border-color: var(--ink); color: var(--ink); }
+.badge[data-backend="gpu"]:hover { border-color: var(--red-deep); color: var(--red-deep); }
 
 /* ----------------------------------------------------------------- panels */
 
