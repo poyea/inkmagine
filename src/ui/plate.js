@@ -32,9 +32,6 @@ export class Plate {
     this.image = null;
     this.animation = null;
     this.backend = 'cpu';
-    // Last CSS size written, so applyZoom can tell a real change from a
-    // rewrite of what is already there. See the note in applyZoom.
-    this.applied = '';
 
     this.observer = new ResizeObserver(() => this.applyZoom());
     if (root.parentElement) this.observer.observe(root.parentElement);
@@ -71,17 +68,6 @@ export class Plate {
     const z = this.effectiveZoom();
     const w = `${Math.round(this.width * z)}px`;
     const h = `${Math.round(this.height * z)}px`;
-
-    // The observer watches this element's parent, and under `fit` the zoom is
-    // measured from that same parent. Writing these sizes changes the parent,
-    // which fires the observer, which measures again: a resize loop feeding
-    // itself, reported by the browser as "ResizeObserver loop completed with
-    // undelivered notifications" and capable of ratcheting the plate up until
-    // it covers the page. Bailing when nothing actually changed terminates it.
-    const applied = `${w}|${h}`;
-    if (applied === this.applied) return;
-    this.applied = applied;
-
     for (const canvas of [this.canvas2d, this.canvasGpu]) {
       canvas.style.width = w;
       canvas.style.height = h;
