@@ -208,11 +208,19 @@ function drawOnCpu(config) {
   lastBackend = 'cpu';
 }
 
+// Tone describes what to do *to an image*. With no image there is nothing to
+// shape, and applying it anyway turns the blank matte into a solid field:
+// inverting an empty white plate yields 100% black, which reads as the app
+// dying rather than as an empty plate.
+const NEUTRAL_TONE = { brightness: 0, contrast: 1, gamma: 1, sharpen: 0, radius: 1, invert: false };
+
 function drawPlate() {
   const config = settings();
   plate.setSize(config.width, config.height);
 
-  if (gpu && isParallel(state.screen.algo)) {
+  if (!state.source) {
+    drawOnCpu({ ...config, tone: NEUTRAL_TONE });
+  } else if (gpu && isParallel(state.screen.algo)) {
     try {
       gpu.render(state.source, state.geo, config);
       plate.showBackend('gpu');
