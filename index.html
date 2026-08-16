@@ -17,9 +17,10 @@
       <span class="masthead__sub">raster reduction apparatus</span>
     </div>
     <div class="masthead__meta">
-      <span class="badge" id="backend-badge" title="Active render backend">
+      <button class="badge" type="button" id="backend-badge" aria-haspopup="dialog"
+              title="Active render backend">
         <span class="badge__dot"></span><span id="backend-text">probing…</span>
-      </span>
+      </button>
       <button class="chip" type="button" id="recipe-open" aria-haspopup="dialog">Recipe</button>
       <button class="chip" type="button" id="help-open" aria-haspopup="dialog">Keys</button>
       <button class="chip" type="button" id="theme-toggle" aria-pressed="false">Darkroom</button>
@@ -277,6 +278,19 @@
   <p class="sheet__lede">
     Everything runs locally in the browser. No image is uploaded anywhere.
   </p>
+</dialog>
+
+<dialog class="sheet sheet--narrow" id="renderer-sheet" aria-labelledby="renderer-title">
+  <form method="dialog" class="sheet__close-form">
+    <button class="chip" value="close" aria-label="Close">✕</button>
+  </form>
+  <h2 id="renderer-title" class="sheet__title">Renderer</h2>
+  <p class="sheet__lede">
+    Which backend drew the plate you are looking at, and what this browser
+    reports about the hardware behind it.
+  </p>
+  <dl class="keys" id="renderer-stats"></dl>
+  <p class="note" id="renderer-note"></p>
 </dialog>
 
 <dialog class="sheet sheet--narrow" id="recipe-sheet" aria-labelledby="recipe-title">

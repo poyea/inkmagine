@@ -10,6 +10,7 @@ import { Plate } from './ui/plate.js';
 import { createBatch } from './ui/batch.js';
 import { CpuRenderer, coverage } from './pipeline.js';
 import { GpuRenderer } from './gpu/renderer.js';
+import { gpuState } from './gpu/device.js';
 import { ALGORITHMS, isParallel, algorithm } from './dither.js';
 import { PRESETS, findPreset, clampDimension } from './presets.js';
 import { loadFile, testWedge, release } from './source.js';
@@ -78,9 +79,79 @@ function setBadge(backend) {
   const badge = $('backend-badge');
   badge.dataset.backend = backend;
   $('backend-text').textContent = backend === 'gpu' ? 'GPU · WGSL' : 'CPU · JS';
-  badge.title = backend === 'gpu'
-    ? 'Composited, toned and screened by WebGPU compute shaders'
-    : 'Rendered on the CPU. Error diffusion is sequential, so it runs here';
+  badge.title = backendTitle(backend);
+}
+
+/**
+ * The detail lives in the tooltip so the badge itself stays two words wide at
+ * every window size. Anything the browser declined to tell us is simply left
+ * out, rather than shown as an empty field.
+ */
+function backendTitle(backend) {
+  const { info, reason } = gpuState();
+  const lines = [];
+
+  if (backend === 'gpu') {
+    lines.push('Composited, toned and screened by WebGPU compute shaders');
+    const chip = [info?.vendor, info?.architecture].filter(Boolean).join(' ');
+    if (chip) lines.push(info.fallback ? `${chip} (software fallback)` : chip);
+    else if (info?.fallback) lines.push('Software fallback adapter');
+    if (info?.maxTexture) lines.push(`Max texture ${info.maxTexture} px`);
+  } else {
+    lines.push('Rendered on the CPU. Error diffusion is sequential, so it runs here');
+    if (reason && reason !== 'ok' && reason !== 'not probed') {
+      lines.push(`WebGPU unavailable: ${reason}`);
+    }
+  }
+
+  const threads = navigator.hardwareConcurrency;
+  if (threads) lines.push(`${threads} CPU thread${threads === 1 ? '' : 's'}`);
+  lines.push('Tap or click for detail');
+  return lines.join('\n');
+}
+
+/**
+ * The same facts as the tooltip, in a sheet, because a tooltip needs hover and
+ * a phone has none. Rows the browser cannot answer are still listed, marked as
+ * not reported: on iOS almost the whole adapter block comes back empty, and a
+ * panel that silently shrank to two rows would read as a bug.
+ */
+function rendererRows() {
+  const { info, reason, format } = gpuState();
+  const chip = [info?.vendor, info?.architecture].filter(Boolean).join(' ');
+  const rows = [
+    ['Backend', lastBackend === 'gpu' ? 'WebGPU compute' : 'CPU, JavaScript'],
+    ['Adapter', chip || 'not reported'],
+  ];
+
+  if (info?.fallback) rows.push(['Driver', 'software fallback, expect it to be slow']);
+  if (info?.maxTexture) rows.push(['Max texture', `${info.maxTexture} px`]);
+  if (format) rows.push(['Canvas format', format]);
+
+  const threads = navigator.hardwareConcurrency;
+  if (threads) rows.push(['CPU threads', String(threads)]);
+  if (navigator.deviceMemory) rows.push(['Device memory', `${navigator.deviceMemory} GB`]);
+  rows.push(['Secure context', window.isSecureContext ? 'yes' : 'no, WebGPU is unavailable']);
+  if (reason && reason !== 'ok' && reason !== 'not probed') rows.push(['WebGPU', reason]);
+  return rows;
+}
+
+function openRenderer() {
+  const list = $('renderer-stats');
+  list.replaceChildren(...rendererRows().map(([label, value]) => {
+    const row = document.createElement('div');
+    const dt = document.createElement('dt');
+    const dd = document.createElement('dd');
+    dt.textContent = label;
+    dd.textContent = value;
+    row.append(dt, dd);
+    return row;
+  }));
+  $('renderer-note').textContent = lastBackend === 'gpu'
+    ? 'Error diffusion is sequential, so choosing one of those screens moves the plate to the CPU.'
+    : 'The CPU path is the reference implementation. Output is identical either way; only speed differs.';
+  const sheet = $('renderer-sheet');
+  if (!sheet.open) sheet.showModal();
 }
 
 // ----------------------------------------------------------------- recipes
@@ -691,6 +762,7 @@ function wireRecipe() {
 function wireChrome() {
   const help = $('help-sheet');
   $('help-open').addEventListener('click', () => help.showModal());
+  $('backend-badge').addEventListener('click', openRenderer);
 
   const toggle = $('theme-toggle');
   const applyTheme = (theme) => {
@@ -865,10 +937,6 @@ async function boot() {
 
   gpu = await GpuRenderer.create($('plate-gpu'));
   setBadge(gpu ? 'gpu' : 'cpu');
-  if (!gpu) {
-    const { gpuState } = await import('./gpu/device.js');
-    $('backend-badge').title = `WebGPU unavailable (${gpuState().reason}), rendering on the CPU`;
-  }
 
   ready = true;
   if (startup.from === 'link') persistNow();

@@ -210,6 +210,9 @@ ol, ul { padding: 0; list-style: none; }
   gap: 8px;
 }
 
+/* A button, not a span: the detail behind it has to be reachable by tap and
+   by keyboard, since a title tooltip is hover-only and never appears on a
+   touch screen. */
 .badge {
   display: inline-flex;
   align-items: center;
@@ -217,13 +220,18 @@ ol, ul { padding: 0; list-style: none; }
   padding: 4px 9px;
   border: 1px solid var(--rule);
   border-radius: 999px;
+  background: none;
   font-family: var(--mono);
   font-size: 10px;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-soft);
   white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
 }
+
+.badge:hover { border-color: var(--ink-faint); }
 
 .badge__dot {
   width: 7px;
