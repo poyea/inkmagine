@@ -326,6 +326,13 @@ ink-switch { display: block; }
   gap: 8px;
   cursor: pointer;
   user-select: none;
+  /* Contains the visually hidden checkbox below. Without it that input is
+     positioned against the initial containing block, so it escapes the rail's
+     overflow clipping and lands wherever its static position falls: roughly
+     1700px down, stretching the document to twice the viewport. Clicking the
+     switch then focuses it, the browser scrolls the focus into view, and the
+     whole app ends up above the top of the window. */
+  position: relative;
 }
 
 .switch input {
