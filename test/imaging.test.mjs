@@ -4,7 +4,7 @@
 // Tests for the parts of inkmagine that do not need a DOM: geometry, tone,
 // screening, blue noise, 1-bpp packing and the ZIP writer.
 //
-//   node --test test/
+//   npm test
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';

@@ -9,7 +9,9 @@
   "scripts": {
     "start": "node dev-server.mjs",
     "dev": "node dev-server.mjs",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "node --test",
+    "audit": "node scripts/audit.mjs",
+    "shaders": "node scripts/extract-wgsl.mjs .wgsl-out --validate"
   },
   "engines": {
     "node": ">=20.11"
