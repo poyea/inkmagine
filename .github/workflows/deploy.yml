@@ -16,7 +16,21 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Publishing straight from the repository root means a broken commit is a
+  # broken site, so the headless checks gate the deploy. The full matrix lives
+  # in ci.yml; this is the fast subset.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test
+      - run: npm run audit
+
   deploy:
+    needs: verify
     runs-on: ubuntu-latest
     environment:
       name: github-pages

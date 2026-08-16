@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A superseded run tells you nothing useful, so let the newest one win.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Node ${{ matrix.node }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The floor declared in package.json, current LTS, and current.
+        node: ['20.11', '22', '24']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+
+      # There is deliberately no `npm ci`: the project has no dependencies.
+      - name: Imaging tests
+        run: npm test
+
+      - name: Wiring audit
+        run: npm run audit
+
+  shaders:
+    name: WGSL validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # naga takes a few minutes to build, and changes about once a year.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cargo/bin/naga
+          key: naga-cli-${{ runner.os }}-v1
+
+      - name: Install naga
+        run: command -v naga || cargo install naga-cli --locked
+
+      - name: Validate the compute shaders
+        run: npm run shaders
