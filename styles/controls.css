@@ -45,6 +45,13 @@
 
 .btn--wide { flex: 1 1 auto; }
 
+/* One click arms a destructive button, the next one fires it. */
+.btn.is-armed {
+  background: var(--red);
+  border-color: var(--red-deep);
+  color: #fff;
+}
+
 .btn--icon {
   min-width: 32px;
   padding: 5px 8px;

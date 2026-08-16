@@ -16,28 +16,25 @@ import { loadFile, testWedge, release } from './source.js';
 import { defaultGeo, frameGeo, cropRect, angleOf, clamp } from './transform.js';
 import { FORMATS, outputName, formatBytes } from './export.js';
 import { OutputSink, directoryPickerSupported } from './fsout.js';
+import {
+  defaultRecipe, normalise, toFlat, toStorage, fromStorage, fromSearch,
+  hasRecipe, shareUrl, isDefault,
+} from './recipe.js';
 
 const $ = (id) => document.getElementById(id);
 const THEME_KEY = 'inkmagine:theme';
+const RECIPE_KEY = 'inkmagine:recipe';
 const QUICK_ALGOS = [
   'threshold', 'floyd', 'atkinson', 'jjn', 'stucki',
   'bayer4', 'bayer8', 'bluenoise', 'halftone8',
 ];
 
+// `output`, `tone` and `screen` are the recipe: one definition of the factory
+// settings, in recipe.js, rather than a copy here that can drift away from it.
 const state = {
   source: null,
   geo: defaultGeo(),
-  output: {
-    width: 480,
-    height: 800,
-    matte: 1,
-    grid: true,
-    live: true,
-    quality: 0.92,
-    polarity: 'white1',
-  },
-  tone: { brightness: 0, contrast: 1, gamma: 1, sharpen: 0.35, radius: 1, invert: false },
-  screen: { algo: 'floyd', levels: 2, strength: 1, bias: 0, serpentine: true },
+  ...defaultRecipe(),
 };
 
 const cpu = new CpuRenderer();
@@ -49,9 +46,12 @@ let batch = null;
 
 let pendingFrame = null;
 let statsTimer = null;
+let persistTimer = null;
 let cpuBytes = null;
 let lastBackend = 'cpu';
 let syncing = false;
+// Nothing is written back to storage until boot has finished reading it.
+let ready = false;
 
 // --------------------------------------------------------------- utilities
 
@@ -81,6 +81,95 @@ function setBadge(backend) {
   badge.title = backend === 'gpu'
     ? 'Composited, toned and screened by WebGPU compute shaders'
     : 'Rendered on the CPU. Error diffusion is sequential, so it runs here';
+}
+
+// ----------------------------------------------------------------- recipes
+
+function currentRecipe() {
+  return normalise({
+    output: { ...state.output },
+    tone: { ...state.tone },
+    screen: { ...state.screen },
+  });
+}
+
+/** Push a recipe into every control, then read it back out into the state. */
+function applyRecipe(recipe, { refit = true } = {}) {
+  const next = normalise(recipe);
+
+  $('brightness').value = next.tone.brightness;
+  $('contrast').value = next.tone.contrast;
+  $('gamma').value = next.tone.gamma;
+  $('sharpen').value = next.tone.sharpen;
+  $('radius').value = next.tone.radius;
+  $('invert').checked = next.tone.invert;
+
+  $('algo').value = next.screen.algo;
+  $('levels').value = String(next.screen.levels);
+  $('strength').value = next.screen.strength;
+  $('bias').value = next.screen.bias;
+  $('serpentine').checked = next.screen.serpentine;
+
+  $('quality').value = next.output.quality;
+  $('grid').checked = next.output.grid;
+  $('live').checked = next.output.live;
+  for (const radio of document.querySelectorAll('input[name="matte"]')) {
+    radio.checked = Number(radio.value) === next.output.matte;
+  }
+  for (const radio of document.querySelectorAll('input[name="polarity"]')) {
+    radio.checked = radio.value === next.output.polarity;
+  }
+
+  state.output.matte = next.output.matte;
+  state.output.quality = next.output.quality;
+  state.output.polarity = next.output.polarity;
+  state.output.grid = next.output.grid;
+  state.output.live = next.output.live;
+
+  readTone();
+  readScreen();
+  setOutputSize(next.output.width, next.output.height, { refit });
+}
+
+function persistNow() {
+  clearTimeout(persistTimer);
+  if (!ready) return;
+  try {
+    const recipe = currentRecipe();
+    // Untouched settings leave no trace, so a reset really does clear up.
+    if (isDefault(recipe)) localStorage.removeItem(RECIPE_KEY);
+    else localStorage.setItem(RECIPE_KEY, toStorage(recipe));
+  } catch {
+    // Private browsing and full quotas both throw here. Losing the session is
+    // a smaller problem than refusing to convert an image, so carry on.
+  }
+}
+
+function persist() {
+  if (!ready) return;
+  clearTimeout(persistTimer);
+  persistTimer = setTimeout(persistNow, 400);
+}
+
+/** A link beats the stored session, which beats the factory settings. */
+function startupRecipe() {
+  if (hasRecipe(location.hash)) {
+    return { recipe: fromSearch(location.hash), from: 'link' };
+  }
+  try {
+    const stored = fromStorage(localStorage.getItem(RECIPE_KEY));
+    if (stored) return { recipe: stored, from: 'session' };
+  } catch { /* see persistNow */ }
+  return { recipe: defaultRecipe(), from: 'default' };
+}
+
+function refreshRecipeSheet() {
+  const recipe = currentRecipe();
+  $('recipe-link').value = shareUrl(recipe, location.href);
+  const changed = Object.keys(toFlat(recipe, { includeLocal: false })).length;
+  $('recipe-note').textContent = changed === 0
+    ? 'Factory settings.'
+    : `${changed} setting${changed === 1 ? ' differs' : 's differ'} from the factory settings.`;
 }
 
 // ----------------------------------------------------------------- render
@@ -214,6 +303,7 @@ function setOutputSize(width, height, { refit = true } = {}) {
     updateGeoReadouts();
     requestRender();
   }
+  persist();
 }
 
 // ---------------------------------------------------------------- source
@@ -317,6 +407,7 @@ function readTone() {
     invert: $('invert').checked,
   };
   requestRender();
+  persist();
 }
 
 function readScreen() {
@@ -332,6 +423,7 @@ function readScreen() {
   $('serpentine').hidden = spec.kind !== 'diffusion';
   $('strength').hidden = spec.kind === 'none' || spec.kind === 'threshold';
   requestRender();
+  persist();
 }
 
 function buildSelects() {
@@ -454,26 +546,31 @@ function wireOutput() {
       state.output.matte = Number(radio.value);
       stage.draw();
       requestRender();
+      persist();
     });
   }
   for (const radio of document.querySelectorAll('input[name="polarity"]')) {
     radio.addEventListener('change', () => {
       state.output.polarity = radio.value;
+      persist();
     });
   }
 
   $('quality').addEventListener('input', () => {
     state.output.quality = $('quality').value;
     scheduleStats();
+    persist();
   });
   $('live').addEventListener('change', () => {
     state.output.live = $('live').checked;
     if (state.output.live) requestRender();
     else markStale(true);
+    persist();
   });
   $('grid').addEventListener('change', () => {
     state.output.grid = $('grid').checked;
     stage.draw();
+    persist();
   });
 
   const folderButton = $('folder');
@@ -539,6 +636,56 @@ function wireConsole() {
       }
     });
   }
+}
+
+function openRecipe() {
+  refreshRecipeSheet();
+  const sheet = $('recipe-sheet');
+  if (!sheet.open) sheet.showModal();
+}
+
+function wireRecipe() {
+  const sheet = $('recipe-sheet');
+  const resetButton = $('recipe-reset');
+  let armed = null;
+
+  const disarm = () => {
+    clearTimeout(armed);
+    armed = null;
+    resetButton.textContent = 'Reset everything';
+    resetButton.classList.remove('is-armed');
+  };
+
+  $('recipe-open').addEventListener('click', openRecipe);
+  sheet.addEventListener('close', disarm);
+
+  $('recipe-copy').addEventListener('click', async () => {
+    const field = $('recipe-link');
+    field.select();
+    try {
+      // Absent outside a secure context, which is exactly where the LAN
+      // fallbacks live, so leave the text selected for a manual copy.
+      await navigator.clipboard.writeText(field.value);
+      $('recipe-note').textContent = 'Link copied to the clipboard.';
+    } catch {
+      $('recipe-note').textContent = 'Press Ctrl/Cmd+C to copy the selected link.';
+    }
+  });
+
+  resetButton.addEventListener('click', () => {
+    if (!armed) {
+      resetButton.textContent = 'Tap again to confirm';
+      resetButton.classList.add('is-armed');
+      armed = setTimeout(disarm, 4000);
+      return;
+    }
+    disarm();
+    if (location.hash) history.replaceState(null, '', location.pathname + location.search);
+    applyRecipe(defaultRecipe());
+    persistNow();
+    refreshRecipeSheet();
+    say('Reset to factory settings.');
+  });
 }
 
 function wireChrome() {
@@ -637,6 +784,7 @@ function wireKeys() {
         break;
       case 'd': case 'D': develop(); break;
       case 'e': case 'E': exportAs('jpg'); break;
+      case 's': case 'S': openRecipe(); break;
       case '[':
         applyGeo(event.shiftKey
           ? { ...geo, quarter: (geo.quarter + 3) % 4 }
@@ -693,11 +841,20 @@ async function boot() {
   wireScreen();
   wireConsole();
   wireBatch();
+  wireRecipe();
   wireChrome();
   wireKeys();
 
-  readTone();
-  readScreen();
+  // Restoring drives every control, which reads back into the state, so this
+  // stands in for the initial readTone()/readScreen() pass as well.
+  const startup = startupRecipe();
+  applyRecipe(startup.recipe, { refit: false });
+  if (startup.from === 'link') {
+    // A link is an import, not a mode: drop it from the address bar so a
+    // later refresh continues from wherever the settings have got to.
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+
   stage.draw();
   updateGeoReadouts();
   updateStats();
@@ -713,10 +870,14 @@ async function boot() {
     $('backend-badge').title = `WebGPU unavailable (${gpuState().reason}), rendering on the CPU`;
   }
 
+  ready = true;
+  if (startup.from === 'link') persistNow();
+
   requestRender();
-  say(gpu
-    ? 'Ready. WebGPU online. Drop an image, or press the test wedge.'
-    : 'Ready. Drop an image, or press the test wedge.');
+  const restored = startup.from === 'link'
+    ? 'Recipe loaded from the link. '
+    : startup.from === 'session' ? 'Settings restored. ' : '';
+  say(`${restored}Ready.${gpu ? ' WebGPU online.' : ''} Drop an image, or press the test wedge.`);
 }
 
 boot().catch((err) => {

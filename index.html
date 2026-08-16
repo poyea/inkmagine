@@ -20,6 +20,7 @@
       <span class="badge" id="backend-badge" title="Active render backend">
         <span class="badge__dot"></span><span id="backend-text">probing…</span>
       </span>
+      <button class="chip" type="button" id="recipe-open" aria-haspopup="dialog">Recipe</button>
       <button class="chip" type="button" id="help-open" aria-haspopup="dialog">Keys</button>
       <button class="chip" type="button" id="theme-toggle" aria-pressed="false">Darkroom</button>
     </div>
@@ -269,12 +270,40 @@
     <div><dt><kbd>I</kbd></dt><dd>Invert</dd></div>
     <div><dt><kbd>D</kbd></dt><dd>Develop</dd></div>
     <div><dt><kbd>E</kbd></dt><dd>Export JPG</dd></div>
+    <div><dt><kbd>S</kbd></dt><dd>Recipe and share link</dd></div>
     <div><dt><kbd>1</kbd>–<kbd>9</kbd></dt><dd>Jump to a screen algorithm</dd></div>
     <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
   </dl>
   <p class="sheet__lede">
     Everything runs locally in the browser. No image is uploaded anywhere.
   </p>
+</dialog>
+
+<dialog class="sheet sheet--narrow" id="recipe-sheet" aria-labelledby="recipe-title">
+  <form method="dialog" class="sheet__close-form">
+    <button class="chip" value="close" aria-label="Close">✕</button>
+  </form>
+  <h2 id="recipe-title" class="sheet__title">Recipe</h2>
+  <p class="sheet__lede">
+    Plate size, tone and screen: everything about how an image is
+    <em>processed</em>. The crop is left out: it is measured in source pixels,
+    so it only means something next to the image it came from.
+  </p>
+  <label class="field">
+    <span class="field__label">Share link</span>
+    <input class="input" type="text" id="recipe-link" readonly spellcheck="false"
+           aria-describedby="recipe-note">
+  </label>
+  <p class="note" id="recipe-note">Factory settings.</p>
+  <div class="row">
+    <button class="btn btn--primary btn--wide" type="button" id="recipe-copy">Copy link</button>
+  </div>
+  <div class="sheet__foot">
+    <p class="note">
+      Settings are stored in this browser only.<br>Opening a link replaces them.
+    </p>
+    <button class="btn" type="button" id="recipe-reset">Reset everything</button>
+  </div>
 </dialog>
 
 <div class="drop-veil" id="drop-veil" aria-hidden="true"><span>Release to load</span></div>

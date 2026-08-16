@@ -498,6 +498,10 @@ ol, ul { padding: 0; list-style: none; }
   margin-bottom: 14px;
 }
 
+/* Recipe sheet: link field, its status line, then the copy button. */
+.sheet .field + .note { margin-top: 6px; }
+.sheet .note + .row { margin-top: 12px; }
+
 .sheet__foot {
   display: flex;
   align-items: center;
