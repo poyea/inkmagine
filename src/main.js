@@ -76,6 +76,21 @@ function say(message, tone = '') {
   else delete ticker.dataset.tone;
 }
 
+/**
+ * One place where a failure becomes visible.
+ *
+ * Every async entry point here is fired from a listener that does not await it,
+ * and drawPlate() runs inside requestAnimationFrame. Until this existed a throw
+ * in any of them reached nothing: the console got an error and whoever was
+ * using the thing got a plate that had quietly stopped updating. boot() was the
+ * only guarded path in the file.
+ */
+function fail(err, context = 'Something went wrong') {
+  console.error(`[inkmagine] ${context}:`, err);
+  const detail = err?.message || (typeof err === 'string' ? err : '');
+  say(detail ? `${context}: ${detail}` : context, 'error');
+}
+
 // ----------------------------------------------------------------- recipes
 
 function currentRecipe() {
@@ -175,8 +190,22 @@ function requestRender() {
   if (pendingFrame) return;
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = null;
-    drawPlate();
+    // Contained here so one bad frame does not take the render loop with it:
+    // the next interaction still schedules a frame and can recover.
+    try {
+      drawPlate();
+    } catch (err) {
+      fail(err, 'Render failed');
+    }
   });
+}
+
+function drawOnCpu(config) {
+  const result = cpu.render(state.source, state.geo, config);
+  plate.paint(result.bytes, config.width, config.height);
+  plate.showBackend('cpu');
+  cpuBytes = result.bytes;
+  lastBackend = 'cpu';
 }
 
 function drawPlate() {
@@ -184,15 +213,22 @@ function drawPlate() {
   plate.setSize(config.width, config.height);
 
   if (gpu && isParallel(state.screen.algo)) {
-    gpu.render(state.source, state.geo, config);
-    plate.showBackend('gpu');
-    lastBackend = 'gpu';
+    try {
+      gpu.render(state.source, state.geo, config);
+      plate.showBackend('gpu');
+      lastBackend = 'gpu';
+    } catch (err) {
+      // A GPU that is present but misbehaving is not the same as one that is
+      // absent, and nothing else demotes it: device.lost only covers a lost
+      // device, and uncapturederror only logs. Without this the plate freezes
+      // with the badge still insisting it is on WebGPU.
+      console.error('[inkmagine] GPU render failed, falling back to the CPU:', err);
+      gpu = null;
+      drawOnCpu(config);
+      say('GPU render failed. Continuing on the CPU.', 'error');
+    }
   } else {
-    const result = cpu.render(state.source, state.geo, config);
-    plate.paint(result.bytes, config.width, config.height);
-    plate.showBackend('cpu');
-    cpuBytes = result.bytes;
-    lastBackend = 'cpu';
+    drawOnCpu(config);
   }
 
   markStale(false);
@@ -846,7 +882,23 @@ function wireKeys() {
 
 // -------------------------------------------------------------------- boot
 
+/**
+ * openFiles, exportAs, develop and updateStats are all async and all fired
+ * from listeners that do not await them, so a rejection in any of them is
+ * unhandled by construction. Catching it here beats bolting .catch() onto
+ * every call site and forgetting one.
+ */
+function wireFailures() {
+  window.addEventListener('error', (event) => {
+    fail(event.error || event.message, 'Something broke');
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    fail(event.reason, 'Something broke');
+  });
+}
+
 async function boot() {
+  wireFailures();
   defineElements();
   buildSelects();
 
