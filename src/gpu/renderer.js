@@ -7,6 +7,7 @@
 // (export, or the ink-coverage readout).
 
 import { BLIT_WGSL, COMPOSE_WGSL, SHARPEN_WGSL, SCREEN_WGSL, PRESENT_WGSL } from './shaders.js';
+import { initGpu, gpuState } from './device.js';
 import { linear, invertLinear } from '../transform.js';
 import { thresholdMatrix, algorithm } from '../dither.js';
 
@@ -84,7 +85,6 @@ export class GpuRenderer {
   }
 
   static async create(canvas) {
-    const { initGpu, gpuState } = await import('./device.js');
     const device = await initGpu();
     if (!device) return null;
     try {
@@ -291,10 +291,12 @@ export class GpuRenderer {
     f[8] = srcW; f[9] = srcH;
     f[10] = clamp(lod, 0, Math.max(0, this.mipCount - 1));
     f[11] = matte ? 1 : 0;
-    f[12] = tone.brightness;
-    f[13] = tone.contrast;
-    f[14] = 1 / (tone.gamma || 1);
-    f[15] = tone.invert ? 1 : 0;
+    // Neutral with no source, matching CpuRenderer.render(): there is nothing
+    // to shape, and inverting a bare matte would render the plate solid.
+    f[12] = source ? tone.brightness : 0;
+    f[13] = source ? tone.contrast : 1;
+    f[14] = source ? 1 / (tone.gamma || 1) : 1;
+    f[15] = source && tone.invert ? 1 : 0;
     f[16] = geo.scale;        // edge feather width, in output pixels
     f[17] = source ? 1 : 0;   // without this a bare ink matte renders mid grey
     f[18] = 0; f[19] = 0;

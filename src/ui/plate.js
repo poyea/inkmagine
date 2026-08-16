@@ -78,6 +78,7 @@ export class Plate {
   }
 
   showBackend(backend) {
+    if (this.backend === backend) return;
     this.backend = backend;
     const gpu = backend === 'gpu';
     this.canvasGpu.hidden = !gpu;

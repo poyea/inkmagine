@@ -78,8 +78,13 @@ export class CpuRenderer {
   render(source, geo, settings) {
     const { width, height, matte, tone, screen: screenOpts } = settings;
     const gray = this.luma(source, geo, width, height, matte);
-    applyTone(gray, tone);
-    sharpen(gray, width, height, tone.sharpen, tone.radius);
+    // Tone describes what to do *to an image*. With none loaded there is
+    // nothing to shape, and inverting a bare white matte yields a solid black
+    // plate, which reads as a failure rather than as an empty plate.
+    if (source) {
+      applyTone(gray, tone);
+      sharpen(gray, width, height, tone.sharpen, tone.radius);
+    }
     const bytes = screen(gray, width, height, screenOpts, this.bytes);
     return { bytes, width, height, backend: 'cpu' };
   }

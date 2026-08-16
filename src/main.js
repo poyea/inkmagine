@@ -71,20 +71,13 @@ function settings() {
 
 function say(message, tone = '') {
   const ticker = $('ticker');
+  if (ticker.textContent === message) return;
   ticker.textContent = message;
   if (tone) ticker.dataset.tone = tone;
   else delete ticker.dataset.tone;
 }
 
-/**
- * One place where a failure becomes visible.
- *
- * Every async entry point here is fired from a listener that does not await it,
- * and drawPlate() runs inside requestAnimationFrame. Until this existed a throw
- * in any of them reached nothing: the console got an error and whoever was
- * using the thing got a plate that had quietly stopped updating. boot() was the
- * only guarded path in the file.
- */
+/** The one place a failure becomes visible: console for detail, ticker for the human. */
 function fail(err, context = 'Something went wrong') {
   console.error(`[inkmagine] ${context}:`, err);
   const detail = err?.message || (typeof err === 'string' ? err : '');
@@ -190,14 +183,14 @@ function requestRender() {
   if (pendingFrame) return;
   pendingFrame = requestAnimationFrame(() => {
     pendingFrame = null;
-    // Contained here so one bad frame does not take the render loop with it:
-    // the next interaction still schedules a frame and can recover.
-    try {
-      drawPlate();
-    } catch (err) {
-      fail(err, 'Render failed');
-    }
+    drawPlate();
   });
+}
+
+/** The one way down to the CPU, whether the device was lost or a render threw. */
+function demoteToCpu(message) {
+  gpu = null;
+  say(message, 'error');
 }
 
 function drawOnCpu(config) {
@@ -208,39 +201,28 @@ function drawOnCpu(config) {
   lastBackend = 'cpu';
 }
 
-// Tone describes what to do *to an image*. With no image there is nothing to
-// shape, and applying it anyway turns the blank matte into a solid field:
-// inverting an empty white plate yields 100% black, which reads as the app
-// dying rather than as an empty plate.
-const NEUTRAL_TONE = { brightness: 0, contrast: 1, gamma: 1, sharpen: 0, radius: 1, invert: false };
-
 function drawPlate() {
   const config = settings();
   plate.setSize(config.width, config.height);
 
-  if (!state.source) {
-    drawOnCpu({ ...config, tone: NEUTRAL_TONE });
-  } else if (gpu && isParallel(state.screen.algo)) {
+  if (gpu && isParallel(state.screen.algo)) {
     try {
       gpu.render(state.source, state.geo, config);
       plate.showBackend('gpu');
       lastBackend = 'gpu';
     } catch (err) {
-      // A GPU that is present but misbehaving is not the same as one that is
-      // absent, and nothing else demotes it: device.lost only covers a lost
-      // device, and uncapturederror only logs. Without this the plate freezes
-      // with the badge still insisting it is on WebGPU.
-      console.error('[inkmagine] GPU render failed, falling back to the CPU:', err);
-      gpu = null;
+      // device.lost only covers a lost device and uncapturederror only logs,
+      // so a present-but-misbehaving adapter has no other way back.
+      console.error('[inkmagine] GPU render failed:', err);
+      demoteToCpu('GPU render failed. Continuing on the CPU.');
       drawOnCpu(config);
-      say('GPU render failed. Continuing on the CPU.', 'error');
     }
   } else {
     drawOnCpu(config);
   }
 
   markStale(false);
-  badge?.set(lastBackend);
+  badge.set(lastBackend);
   scheduleStats();
 }
 
@@ -374,7 +356,7 @@ async function openFiles(files) {
     const source = await loadFile(images[0]);
     await adoptSource(source, `Loaded ${source.name}.`);
   } catch (err) {
-    say(err?.message || 'Could not read that image.', 'error');
+    fail(err, 'Could not read that image');
   }
 }
 
@@ -415,7 +397,7 @@ async function exportAs(kind) {
     say(`Wrote ${written.name} · ${formatBytes(blob.size)} → ${where}`);
   } catch (err) {
     if (err?.name === 'AbortError') say('Export cancelled.');
-    else say(err?.message || 'Export failed.', 'error');
+    else fail(err, 'Export failed');
   }
 }
 
@@ -623,7 +605,7 @@ function wireOutput() {
       try {
         await sink.choose();
       } catch (err) {
-        if (err?.name !== 'AbortError') say(err?.message || 'Could not open that folder.', 'error');
+        if (err?.name !== 'AbortError') fail(err, 'Could not open that folder');
       }
     });
     sink.onChange(() => {
@@ -695,7 +677,6 @@ function wireRecipe() {
 
   $('recipe-open').addEventListener('click', openRecipe);
   sheet.addEventListener('close', disarm);
-  lightDismiss(sheet);
 
   $('recipe-copy').addEventListener('click', async () => {
     const field = $('recipe-link');
@@ -727,37 +708,35 @@ function wireRecipe() {
 }
 
 /**
- * Close a sheet when the backdrop is clicked. <dialog> gives us Esc for free
- * but not this.
- *
- * `event.target === dialog` is not enough on its own: the sheet carries 20px
- * of padding, and a click landing on that targets the dialog itself while
- * looking, to whoever clicked, like a click inside. So compare against the box.
- *
- * Both ends of the click have to be on the backdrop, which is what stops a
- * drag that begins on the share-link text and ends past the sheet edge from
- * dismissing the thing you were selecting in.
+ * Close a sheet on a backdrop click. The sheet's own padding means
+ * `event.target === dialog` is not enough on its own, and both ends of the
+ * click have to land outside, so selecting the share link and releasing past
+ * the edge does not dismiss what you were reading.
  */
 function lightDismiss(dialog) {
-  const onBackdrop = (event) => {
-    if (event.target !== dialog) return false;
-    const box = dialog.getBoundingClientRect();
-    return event.clientX < box.left || event.clientX > box.right
-      || event.clientY < box.top || event.clientY > box.bottom;
-  };
+  let box = null;
+  const outside = (event) => box !== null
+    && (event.clientX < box.left || event.clientX > box.right
+      || event.clientY < box.top || event.clientY > box.bottom);
 
-  let started = false;
-  dialog.addEventListener('pointerdown', (event) => { started = onBackdrop(event); });
+  dialog.addEventListener('pointerdown', (event) => {
+    box = event.target === dialog ? dialog.getBoundingClientRect() : null;
+    if (!outside(event)) box = null;
+  });
   dialog.addEventListener('click', (event) => {
-    if (started && onBackdrop(event)) dialog.close();
-    started = false;
+    if (event.target === dialog && outside(event)) dialog.close();
+    box = null;
   });
 }
 
 function wireChrome() {
   const help = $('help-sheet');
   $('help-open').addEventListener('click', () => help.showModal());
-  lightDismiss(help);
+  // Every sheet but the batch one, where a stray click during a run would hide
+  // a conversion that is still going.
+  for (const sheet of document.querySelectorAll('dialog.sheet:not(#batch-sheet)')) {
+    lightDismiss(sheet);
+  }
 
   badge = createBackendBadge({
     badge: $('backend-badge'),
@@ -785,9 +764,8 @@ function wireChrome() {
   });
 
   window.addEventListener('inkmagine:gpu-lost', () => {
-    gpu = null;
-    badge?.set('cpu');
-    say('GPU device lost. Continuing on the CPU.', 'error');
+    demoteToCpu('GPU device lost. Continuing on the CPU.');
+    badge.set('cpu');
     requestRender();
   });
 }
@@ -890,19 +868,13 @@ function wireKeys() {
 
 // -------------------------------------------------------------------- boot
 
-/**
- * openFiles, exportAs, develop and updateStats are all async and all fired
- * from listeners that do not await them, so a rejection in any of them is
- * unhandled by construction. Catching it here beats bolting .catch() onto
- * every call site and forgetting one.
- */
+// Async handlers are fired from listeners that never await them, so their
+// rejections are unhandled by construction. One place beats a .catch() per
+// call site and forgetting the next one.
 function wireFailures() {
   window.addEventListener('error', (event) => {
-    // The browser reports this as an ErrorEvent, but it is not a failure: it
-    // only means a resize callback was deferred to the next frame. Surfacing
-    // it would put an alarming message in the ticker, and writing to the DOM
-    // on every one of them adds layout work to whatever loop produced it.
-    if (String(event.message || '').startsWith('ResizeObserver loop')) return;
+    // Not a failure: the browser reports a deferred resize callback this way.
+    if (typeof event.message === 'string' && event.message.startsWith('ResizeObserver loop')) return;
     fail(event.error || event.message, 'Something broke');
   });
   window.addEventListener('unhandledrejection', (event) => {
@@ -973,6 +945,5 @@ async function boot() {
 }
 
 boot().catch((err) => {
-  console.error(err);
-  say(err?.message || 'Inkmagine failed to start.', 'error');
+  fail(err, 'Inkmagine failed to start');
 });

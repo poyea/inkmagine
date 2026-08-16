@@ -6,26 +6,13 @@
 let pending = null;
 let state = { supported: false, device: null, format: null, reason: 'not probed' };
 
-/**
- * What the adapter is willing to say about itself. Every field is optional on
- * purpose: Chrome masks `device` and `description` unless developer features
- * are enabled, and Safari leaves most of it empty, so callers must cope with
- * blanks rather than render `undefined` at the user.
- */
-async function describe(adapter) {
-  // `adapter.info` is the current spec. Older Chromium only had the async
-  // requestAdapterInfo(), and neither is guaranteed to exist.
-  let raw = adapter.info;
-  if (!raw && typeof adapter.requestAdapterInfo === 'function') {
-    raw = await adapter.requestAdapterInfo().catch(() => null);
-  }
+/** Blank fields are normal: Chrome and Safari both mask most adapter info. */
+function describe(adapter) {
+  const raw = adapter.info || {};
   return {
-    vendor: raw?.vendor || '',
-    architecture: raw?.architecture || '',
-    device: raw?.device || '',
-    description: raw?.description || '',
-    // A software rasteriser reports as a GPU but is often slower than the CPU
-    // path, which is worth saying out loud rather than leaving as a mystery.
+    vendor: raw.vendor || '',
+    architecture: raw.architecture || '',
+    // A software rasteriser reports as a GPU but is often slower than the CPU.
     fallback: adapter.isFallbackAdapter === true,
     maxTexture: adapter.limits?.maxTextureDimension2D || 0,
   };
@@ -76,7 +63,7 @@ export function initGpu() {
         console.error('[inkmagine] WebGPU error:', event.error?.message || event.error);
       });
 
-      state = { supported: true, device, format, reason: 'ok', adapter, info: await describe(adapter) };
+      state = { supported: true, device, format, reason: 'ok', adapter, info: describe(adapter) };
       return device;
     } catch (err) {
       state = { supported: false, device: null, format: null, reason: err?.message || String(err) };

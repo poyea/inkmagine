@@ -3,15 +3,9 @@
 
 // The render-backend badge, and the sheet of detail behind it.
 //
-// The badge says which backend drew the plate. The sheet says what the browser
-// will admit about the hardware underneath, which is a presentation problem
-// rather than a rendering one, so it lives here instead of in main.js.
-//
-// Two rules run through all of it. Anything the browser declines to answer is
-// dropped from the tooltip but kept in the sheet as "not reported", because a
-// panel that silently shrank to two rows on iOS would read as a bug. And the
-// badge is a button, not a span: a title tooltip needs hover, and a phone has
-// none.
+// One rule throughout: anything the browser declines to answer is still listed
+// in the sheet as "not reported", because a panel that silently shrank to two
+// rows on iOS would read as a bug rather than a limitation.
 
 import { gpuState } from '../gpu/device.js';
 
@@ -22,52 +16,39 @@ function chipName(info) {
   return [info?.vendor, info?.architecture].filter(Boolean).join(' ');
 }
 
-/** A probe reason worth showing, as opposed to success or an unfinished probe. */
+/** A probe reason worth showing, as opposed to success. */
 function realFailure(reason) {
   return reason && reason !== 'ok' && reason !== 'not probed' ? reason : '';
 }
 
-function tooltip(backend) {
-  const { info, reason } = gpuState();
-  const lines = [];
-
-  if (backend === 'gpu') {
-    lines.push('Composited, toned and screened by WebGPU compute shaders');
-    const chip = chipName(info);
-    if (chip) lines.push(info.fallback ? `${chip} (software fallback)` : chip);
-    else if (info?.fallback) lines.push('Software fallback adapter');
-    if (info?.maxTexture) lines.push(`Max texture ${info.maxTexture} px`);
-  } else {
-    lines.push('Rendered on the CPU. Error diffusion is sequential, so it runs here');
-    const failure = realFailure(reason);
-    if (failure) lines.push(`WebGPU unavailable: ${failure}`);
-  }
-
-  const threads = navigator.hardwareConcurrency;
-  if (threads) lines.push(`${threads} CPU thread${threads === 1 ? '' : 's'}`);
-  lines.push('Tap or click for detail');
-  return lines.join('\n');
+/**
+ * Why this backend is the one drawing. Being on the CPU with a working GPU
+ * present means the screen is error-diffused, which is the case someone is
+ * most likely to open the sheet to ask about.
+ */
+function why(backend) {
+  if (backend === 'gpu') return 'Composed, toned and screened by WebGPU compute shaders.';
+  const failure = realFailure(gpuState().reason);
+  return failure
+    ? `WebGPU is unavailable here (${failure}), so everything runs on the CPU.`
+    : 'Error diffusion is sequential, so those screens run on the CPU. Pick an ordered screen for the GPU path.';
 }
 
 /** @returns {Array<[string, string]>} label/value pairs for the sheet. */
 function rows(backend) {
-  const { info, reason, format } = gpuState();
+  const { info, format } = gpuState();
   const out = [
-    ['Backend', backend === 'gpu' ? 'WebGPU compute' : 'CPU, JavaScript'],
+    ['Backend', backend === 'gpu' ? 'WebGPU compute' : 'JavaScript on the CPU'],
     ['Adapter', chipName(info) || 'not reported'],
   ];
 
-  if (info?.fallback) out.push(['Driver', 'software fallback, expect it to be slow']);
+  if (info?.fallback) out.push(['Driver', 'software fallback']);
   if (info?.maxTexture) out.push(['Max texture', `${info.maxTexture} px`]);
   if (format) out.push(['Canvas format', format]);
 
   const threads = navigator.hardwareConcurrency;
   if (threads) out.push(['CPU threads', String(threads)]);
   if (navigator.deviceMemory) out.push(['Device memory', `${navigator.deviceMemory} GB`]);
-  out.push(['Secure context', window.isSecureContext ? 'yes' : 'no, WebGPU is unavailable']);
-
-  const failure = realFailure(reason);
-  if (failure) out.push(['WebGPU', failure]);
   return out;
 }
 
@@ -82,13 +63,11 @@ function rowElement([label, value]) {
 }
 
 export function createBackendBadge({ badge, text, sheet, list, note }) {
-  let current = 'cpu';
+  let current = null;
 
   const open = () => {
     list.replaceChildren(...rows(current).map(rowElement));
-    note.textContent = current === 'gpu'
-      ? 'Error diffusion is sequential, so choosing one of those screens moves the plate to the CPU.'
-      : 'The CPU path is the reference implementation. Output is identical either way; only speed differs.';
+    note.textContent = why(current);
     if (!sheet.open) sheet.showModal();
   };
 
@@ -97,11 +76,13 @@ export function createBackendBadge({ badge, text, sheet, list, note }) {
   return {
     /** @param {'gpu'|'cpu'} backend */
     set(backend) {
+      // drawPlate calls this every frame; the backend changes about three
+      // times in a session.
+      if (backend === current) return;
       current = backend;
       badge.dataset.backend = backend;
       text.textContent = LABEL[backend];
-      badge.title = tooltip(backend);
+      badge.title = why(backend);
     },
-    open,
   };
 }

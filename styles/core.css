@@ -210,25 +210,15 @@ ol, ul { padding: 0; list-style: none; }
   gap: 8px;
 }
 
-/* A button, not a span: the detail behind it has to be reachable by tap and
-   by keyboard, since a title tooltip is hover-only and never appears on a
-   touch screen. */
+/* Worn alongside .chip, which carries the pill itself. A button rather than a
+   span: the sheet behind it has to be reachable by tap, and a title tooltip
+   never appears on a touch screen. */
 .badge {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  padding: 4px 9px;
-  border: 1px solid var(--rule);
-  border-radius: 999px;
-  background: none;
-  font-family: var(--mono);
-  font-size: 10px;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--ink-soft);
   white-space: nowrap;
-  cursor: pointer;
-  -webkit-tap-highlight-color: transparent;
+  --badge-ink: var(--ink);
 }
 
 .badge__dot {
@@ -238,15 +228,16 @@ ol, ul { padding: 0; list-style: none; }
   background: var(--ink-faint);
 }
 
-.badge[data-backend="gpu"] { border-color: var(--red); color: var(--red); }
+/* Custom properties inherit rather than compete on specificity, so one hover
+   rule serves both states. */
+.badge[data-backend="gpu"] {
+  border-color: var(--red);
+  color: var(--red);
+  --badge-ink: var(--red-deep);
+}
 .badge[data-backend="gpu"] .badge__dot { background: var(--red); }
 .badge[data-backend="cpu"] .badge__dot { background: var(--ink-soft); }
-
-/* After the state rules, and matched per state: the backend colour is set at
-   the same specificity, so a single .badge:hover would lose to it and the
-   badge would look dead on hover in exactly the state it is usually in. */
-.badge:hover { border-color: var(--ink); color: var(--ink); }
-.badge[data-backend="gpu"]:hover { border-color: var(--red-deep); color: var(--red-deep); }
+.badge.chip:hover { border-color: var(--badge-ink); color: var(--badge-ink); }
 
 /* ----------------------------------------------------------------- panels */
 
@@ -349,6 +340,9 @@ ol, ul { padding: 0; list-style: none; }
   place-items: center;
   min-height: 0;
   overflow: auto;
+  /* Reserve the scrollbar so appearing or hiding it cannot resize the box the
+     fit zoom measures. */
+  scrollbar-gutter: stable;
   padding: 6px;
 }
 
@@ -581,13 +575,9 @@ kbd {
 @media (max-width: 1240px) {
   .bench { grid-template-columns: 292px minmax(0, 1fr); }
   .plate-column { grid-column: 1 / -1; grid-template-rows: auto auto auto; }
-  /* A definite height, not a cap. These rows are `auto`, so `max-height` leaves
-     the box shrink-wrapped around its contents, and the plate is its contents:
-     the canvas sizes the box, ResizeObserver fires, effectiveZoom() measures
-     the box it just changed, and the plate walks to one end of its zoom clamp.
-     Collapsing to the 0.05 floor leaves a 24x40 plate; on the way it makes the
-     document tall enough to scroll, and the scroll position survives the
-     collapse, stranding the viewport past the end of the app. */
+  /* A definite height, not a cap: these rows are `auto`, so a capped box
+     shrink-wraps the plate, and the fit zoom then measures a box its own
+     canvas just sized. */
   .plate-box { height: 46dvh; }
 }
 
