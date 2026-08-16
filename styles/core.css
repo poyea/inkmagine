@@ -239,6 +239,20 @@ ol, ul { padding: 0; list-style: none; }
 .badge[data-backend="cpu"] .badge__dot { background: var(--ink-soft); }
 .badge.chip:hover { border-color: var(--badge-ink); color: var(--badge-ink); }
 
+/* The only links in the app: the byline, and the source link in the Keys
+   sheet. Both inherit their surroundings and only announce themselves on
+   hover. */
+.masthead__sub a,
+.sheet a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--rule);
+}
+
+.masthead__sub a:hover,
+.sheet a:hover { color: var(--red); text-decoration-color: var(--red); }
+
 /* ----------------------------------------------------------------- panels */
 
 .panel {
