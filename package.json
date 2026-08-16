@@ -1,0 +1,17 @@
+{
+  "name": "inkmagine",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Crop, rotate and halftone any image into a 1-bit plate, entirely in the browser.",
+  "license": "MIT",
+  "author": "@poyea",
+  "type": "module",
+  "scripts": {
+    "start": "node dev-server.mjs",
+    "dev": "node dev-server.mjs",
+    "test": "node --test \"test/**/*.test.mjs\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

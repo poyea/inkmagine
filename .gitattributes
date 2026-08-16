@@ -1,0 +1,11 @@
+# Normalise to LF in the repository; check out native on Windows.
+* text=auto
+
+*.js   text eol=lf
+*.mjs  text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.json text eol=lf
+*.md   text eol=lf
+*.yml  text eol=lf
+*.wgsl text eol=lf

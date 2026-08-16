@@ -1,0 +1,286 @@
+<!-- SPDX-License-Identifier: MIT -->
+<!-- Copyright (c) 2026 @poyea -->
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Inkmagine: raster reduction apparatus</title>
+<meta name="description" content="Crop, rotate and halftone any image into a 1-bit 480 × 800 plate. Runs entirely in your browser.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23e9e3d6'/%3E%3Cg fill='%2316130f'%3E%3Crect x='5' y='5' width='7' height='7'/%3E%3Crect x='16' y='9' width='4' height='4'/%3E%3Crect x='22' y='5' width='5' height='5'/%3E%3Crect x='5' y='18' width='5' height='5'/%3E%3Crect x='14' y='16' width='9' height='9'/%3E%3C/g%3E%3C/svg%3E">
+<link rel="stylesheet" href="styles/core.css">
+<link rel="stylesheet" href="styles/controls.css">
+
+<div class="machine">
+
+  <header class="masthead">
+    <div class="masthead__mark">
+      <span class="wordmark">Inkmagine</span>
+      <span class="masthead__sub">raster reduction apparatus</span>
+    </div>
+    <div class="masthead__meta">
+      <span class="badge" id="backend-badge" title="Active render backend">
+        <span class="badge__dot"></span><span id="backend-text">probing…</span>
+      </span>
+      <button class="chip" type="button" id="help-open" aria-haspopup="dialog">Keys</button>
+      <button class="chip" type="button" id="theme-toggle" aria-pressed="false">Darkroom</button>
+    </div>
+  </header>
+
+  <main class="bench">
+
+    <!-- ------------------------------------------------------ control rail -->
+    <aside class="rail">
+
+      <section class="panel">
+        <h2 class="panel__title"><span class="panel__num">01</span>Source</h2>
+        <div class="dropzone" id="dropzone" tabindex="0" role="button"
+             aria-label="Choose an image, or drop one here">
+          <span class="dropzone__glyph" aria-hidden="true"></span>
+          <span class="dropzone__text">Drop an image<br><em>or click to choose</em></span>
+        </div>
+        <input type="file" id="file-input" accept="image/*" hidden>
+        <input type="file" id="batch-input" accept="image/*" multiple hidden>
+        <div class="row">
+          <button class="btn" type="button" id="load-wedge">Test wedge</button>
+          <button class="btn" type="button" id="batch-open">Batch…</button>
+        </div>
+        <dl class="readout">
+          <div><dt>File</dt><dd id="src-name">—</dd></div>
+          <div><dt>Source</dt><dd id="src-dims">—</dd></div>
+        </dl>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel__title"><span class="panel__num">02</span>Plate size</h2>
+        <label class="field">
+          <span class="field__label">Preset</span>
+          <select id="preset" class="select"></select>
+        </label>
+        <div class="row row--size">
+          <label class="field field--tight">
+            <span class="field__label">W</span>
+            <input class="input" type="number" id="out-w" min="8" max="8192" step="1" value="480">
+          </label>
+          <span class="times" aria-hidden="true">×</span>
+          <label class="field field--tight">
+            <span class="field__label">H</span>
+            <input class="input" type="number" id="out-h" min="8" max="8192" step="1" value="800">
+          </label>
+          <button class="btn btn--icon" type="button" id="swap-size" title="Swap width and height"
+                  aria-label="Swap width and height">⇄</button>
+        </div>
+        <fieldset class="segment">
+          <legend class="field__label">Matte</legend>
+          <label><input type="radio" name="matte" value="1" checked><span>Paper</span></label>
+          <label><input type="radio" name="matte" value="0"><span>Ink</span></label>
+        </fieldset>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel__title"><span class="panel__num">03</span>Geometry</h2>
+        <div class="geometry">
+          <ink-dial id="rotate" label="Rotate" min="-180" max="180" step="0.1"
+                    value="0" decimals="1" unit="°" detent="45"></ink-dial>
+          <div class="geometry__side">
+            <div class="row">
+              <button class="btn btn--icon" type="button" id="rot-ccw" title="Rotate 90° left"
+                      aria-label="Rotate 90 degrees left">↺</button>
+              <button class="btn btn--icon" type="button" id="rot-cw" title="Rotate 90° right"
+                      aria-label="Rotate 90 degrees right">↻</button>
+            </div>
+            <ink-switch id="flip-h" label="Flip H"></ink-switch>
+            <ink-switch id="flip-v" label="Flip V"></ink-switch>
+          </div>
+        </div>
+        <ink-fader id="zoom" label="Zoom" min="-6" max="4" step="0.001"
+                   value="0" format="log2pct"></ink-fader>
+        <div class="row">
+          <button class="btn" type="button" id="fit">Fit</button>
+          <button class="btn" type="button" id="fill">Fill</button>
+          <button class="btn" type="button" id="geo-reset">Reset</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel__title"><span class="panel__num">04</span>Tone</h2>
+        <ink-fader id="brightness" label="Brightness" min="-0.5" max="0.5" step="0.005" value="0"></ink-fader>
+        <ink-fader id="contrast" label="Contrast" min="0" max="3" step="0.01" value="1"></ink-fader>
+        <ink-fader id="gamma" label="Gamma" min="0.2" max="3" step="0.01" value="1"></ink-fader>
+        <ink-fader id="sharpen" label="Sharpen" min="0" max="2" step="0.01" value="0.35"></ink-fader>
+        <ink-fader id="radius" label="Radius" min="1" max="3" step="1" value="1" decimals="0" unit=" px"></ink-fader>
+        <div class="row">
+          <ink-switch id="invert" label="Invert"></ink-switch>
+        </div>
+        <div class="row">
+          <button class="btn btn--wide" type="button" id="auto-tone">Auto tone</button>
+          <button class="btn" type="button" id="tone-reset">Reset</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel__title"><span class="panel__num">05</span>Screen</h2>
+        <label class="field">
+          <span class="field__label">Algorithm</span>
+          <select id="algo" class="select"></select>
+        </label>
+        <label class="field">
+          <span class="field__label">Levels</span>
+          <select id="levels" class="select">
+            <option value="2" selected>2 (black &amp; white)</option>
+            <option value="4">4 grey</option>
+            <option value="8">8 grey</option>
+            <option value="16">16 grey</option>
+          </select>
+        </label>
+        <ink-fader id="strength" label="Strength" min="0" max="1.5" step="0.01" value="1"></ink-fader>
+        <ink-fader id="bias" label="Bias" min="-0.4" max="0.4" step="0.005" value="0"></ink-fader>
+        <ink-switch id="serpentine" label="Serpentine" checked></ink-switch>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel__title"><span class="panel__num">06</span>Output</h2>
+        <ink-fader id="quality" label="JPEG quality" min="0.3" max="1" step="0.01" value="0.92"></ink-fader>
+        <fieldset class="segment">
+          <legend class="field__label">Set bit means (.bin / .h)</legend>
+          <label><input type="radio" name="polarity" value="white1" checked><span>White</span></label>
+          <label><input type="radio" name="polarity" value="black1"><span>Black</span></label>
+        </fieldset>
+        <div class="row">
+          <button class="btn btn--wide" type="button" id="folder">Output folder…</button>
+        </div>
+        <p class="note" id="folder-note">Exports download normally.</p>
+        <div class="row">
+          <ink-switch id="live" label="Live" checked></ink-switch>
+          <ink-switch id="grid" label="Guides" checked></ink-switch>
+        </div>
+      </section>
+    </aside>
+
+    <!-- ------------------------------------------------------ specimen tray -->
+    <section class="tray">
+      <div class="stage-head">
+        <h2 class="stage-title">Specimen tray</h2>
+        <span class="stage-hint">drag to move · wheel to zoom · double-click to fit</span>
+      </div>
+      <div class="stage-box">
+        <canvas id="stage" class="stage-canvas" tabindex="0"
+                aria-label="Crop and rotate the source image"></canvas>
+      </div>
+      <dl class="readout readout--row">
+        <div><dt>Crop</dt><dd id="crop-readout">—</dd></div>
+        <div><dt>Scale</dt><dd id="scale-readout">—</dd></div>
+        <div><dt>Angle</dt><dd id="angle-readout">0°</dd></div>
+      </dl>
+    </section>
+
+    <!-- ------------------------------------------------------------- plate -->
+    <section class="plate-column">
+      <div class="stage-head">
+        <h2 class="stage-title">Plate</h2>
+        <div class="zoom-group" role="group" aria-label="Plate zoom">
+          <button class="chip" type="button" data-zoom="fit" aria-pressed="true">Fit</button>
+          <button class="chip" type="button" data-zoom="1" aria-pressed="false">1:1</button>
+          <button class="chip" type="button" data-zoom="2" aria-pressed="false">2×</button>
+        </div>
+      </div>
+      <div class="plate-box">
+        <div class="bezel" id="plate-root">
+          <div class="bezel__screen">
+            <canvas id="plate-2d" class="plate-canvas"></canvas>
+            <canvas id="plate-gpu" class="plate-canvas" hidden></canvas>
+          </div>
+          <div class="bezel__ribbon" aria-hidden="true"><span></span><span></span><span></span></div>
+        </div>
+      </div>
+      <dl class="readout readout--row">
+        <div><dt>Ink</dt><dd id="coverage-readout">—</dd></div>
+        <div><dt>JPEG</dt><dd id="size-readout">—</dd></div>
+        <div><dt>1bpp</dt><dd id="packed-readout">—</dd></div>
+      </dl>
+    </section>
+  </main>
+
+  <!-- ---------------------------------------------------------- console bar -->
+  <footer class="console">
+    <ink-lever id="develop" label="Develop"></ink-lever>
+    <div class="console__exports">
+      <button class="btn btn--primary" type="button" id="export-jpg">Export JPG</button>
+      <button class="btn" type="button" id="export-png">PNG</button>
+      <button class="btn" type="button" id="export-bin">.bin</button>
+      <button class="btn" type="button" id="export-h">.h</button>
+    </div>
+    <p class="ticker" id="ticker" role="status" aria-live="polite">Ready. Load an image to begin.</p>
+  </footer>
+</div>
+
+<!-- ------------------------------------------------------------- overlays -->
+<dialog class="sheet" id="batch-sheet" aria-labelledby="batch-title">
+  <form method="dialog" class="sheet__close-form">
+    <button class="chip" value="close" aria-label="Close">✕</button>
+  </form>
+  <h2 id="batch-title" class="sheet__title">Batch conversion</h2>
+  <p class="sheet__lede">
+    Every image is fitted to the current plate size and run through the settings
+    on the rail. Nothing leaves your machine.
+  </p>
+  <div class="dropzone dropzone--wide" id="batch-drop" tabindex="0" role="button"
+       aria-label="Choose images, or drop them here">
+    <span class="dropzone__glyph" aria-hidden="true"></span>
+    <span class="dropzone__text">Drop images<br><em>or click to choose</em></span>
+  </div>
+  <div class="row row--between">
+    <label class="field field--tight">
+      <span class="field__label">Format</span>
+      <select id="batch-format" class="select">
+        <option value="jpg" selected>JPEG</option>
+        <option value="png">PNG</option>
+        <option value="bin">1bpp .bin</option>
+        <option value="h">C header .h</option>
+      </select>
+    </label>
+    <fieldset class="segment">
+      <legend class="field__label">Crop</legend>
+      <label><input type="radio" name="batch-fit" value="fill" checked><span>Fill</span></label>
+      <label><input type="radio" name="batch-fit" value="fit"><span>Fit</span></label>
+    </fieldset>
+    <ink-switch id="batch-zip" label="Single .zip" checked></ink-switch>
+  </div>
+  <ol class="batch-list" id="batch-list"></ol>
+  <div class="sheet__foot">
+    <progress class="progress" id="batch-progress" value="0" max="1" hidden></progress>
+    <div class="row">
+      <button class="btn" type="button" id="batch-clear">Clear</button>
+      <button class="btn btn--primary" type="button" id="batch-run" disabled>Convert all</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog class="sheet sheet--narrow" id="help-sheet" aria-labelledby="help-title">
+  <form method="dialog" class="sheet__close-form">
+    <button class="chip" value="close" aria-label="Close">✕</button>
+  </form>
+  <h2 id="help-title" class="sheet__title">Keys</h2>
+  <dl class="keys">
+    <div><dt><kbd>↑</kbd><kbd>↓</kbd><kbd>←</kbd><kbd>→</kbd></dt><dd>Nudge the image (hold <kbd>Shift</kbd> for 10 px)</dd></div>
+    <div><dt><kbd>+</kbd><kbd>−</kbd></dt><dd>Zoom</dd></div>
+    <div><dt><kbd>[</kbd><kbd>]</kbd></dt><dd>Rotate 1° (hold <kbd>Shift</kbd> for 90°)</dd></div>
+    <div><dt><kbd>F</kbd></dt><dd>Fit · <kbd>Shift</kbd>+<kbd>F</kbd> fill</dd></div>
+    <div><dt><kbd>R</kbd></dt><dd>Reset geometry</dd></div>
+    <div><dt><kbd>A</kbd></dt><dd>Auto tone</dd></div>
+    <div><dt><kbd>I</kbd></dt><dd>Invert</dd></div>
+    <div><dt><kbd>D</kbd></dt><dd>Develop</dd></div>
+    <div><dt><kbd>E</kbd></dt><dd>Export JPG</dd></div>
+    <div><dt><kbd>1</kbd>–<kbd>9</kbd></dt><dd>Jump to a screen algorithm</dd></div>
+    <div><dt><kbd>?</kbd></dt><dd>This list</dd></div>
+  </dl>
+  <p class="sheet__lede">
+    Everything runs locally in the browser. No image is uploaded anywhere.
+  </p>
+</dialog>
+
+<div class="drop-veil" id="drop-veil" aria-hidden="true"><span>Release to load</span></div>
+
+<noscript>
+  <p class="noscript">Inkmagine converts images entirely in your browser, so it needs JavaScript enabled.</p>
+</noscript>
+
+<script type="module" src="src/main.js"></script>
