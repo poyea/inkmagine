@@ -898,6 +898,11 @@ function wireKeys() {
  */
 function wireFailures() {
   window.addEventListener('error', (event) => {
+    // The browser reports this as an ErrorEvent, but it is not a failure: it
+    // only means a resize callback was deferred to the next frame. Surfacing
+    // it would put an alarming message in the ticker, and writing to the DOM
+    // on every one of them adds layout work to whatever loop produced it.
+    if (String(event.message || '').startsWith('ResizeObserver loop')) return;
     fail(event.error || event.message, 'Something broke');
   });
   window.addEventListener('unhandledrejection', (event) => {
