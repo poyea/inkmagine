@@ -651,6 +651,7 @@ function wireRecipe() {
 
   $('recipe-open').addEventListener('click', openRecipe);
   sheet.addEventListener('close', disarm);
+  lightDismiss(sheet);
 
   $('recipe-copy').addEventListener('click', async () => {
     const field = $('recipe-link');
@@ -681,9 +682,38 @@ function wireRecipe() {
   });
 }
 
+/**
+ * Close a sheet when the backdrop is clicked. <dialog> gives us Esc for free
+ * but not this.
+ *
+ * `event.target === dialog` is not enough on its own: the sheet carries 20px
+ * of padding, and a click landing on that targets the dialog itself while
+ * looking, to whoever clicked, like a click inside. So compare against the box.
+ *
+ * Both ends of the click have to be on the backdrop, which is what stops a
+ * drag that begins on the share-link text and ends past the sheet edge from
+ * dismissing the thing you were selecting in.
+ */
+function lightDismiss(dialog) {
+  const onBackdrop = (event) => {
+    if (event.target !== dialog) return false;
+    const box = dialog.getBoundingClientRect();
+    return event.clientX < box.left || event.clientX > box.right
+      || event.clientY < box.top || event.clientY > box.bottom;
+  };
+
+  let started = false;
+  dialog.addEventListener('pointerdown', (event) => { started = onBackdrop(event); });
+  dialog.addEventListener('click', (event) => {
+    if (started && onBackdrop(event)) dialog.close();
+    started = false;
+  });
+}
+
 function wireChrome() {
   const help = $('help-sheet');
   $('help-open').addEventListener('click', () => help.showModal());
+  lightDismiss(help);
 
   badge = createBackendBadge({
     badge: $('backend-badge'),
