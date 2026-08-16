@@ -581,7 +581,14 @@ kbd {
 @media (max-width: 1240px) {
   .bench { grid-template-columns: 292px minmax(0, 1fr); }
   .plate-column { grid-column: 1 / -1; grid-template-rows: auto auto auto; }
-  .plate-box { max-height: 46dvh; }
+  /* A definite height, not a cap. These rows are `auto`, so `max-height` leaves
+     the box shrink-wrapped around its contents, and the plate is its contents:
+     the canvas sizes the box, ResizeObserver fires, effectiveZoom() measures
+     the box it just changed, and the plate walks to one end of its zoom clamp.
+     Collapsing to the 0.05 floor leaves a 24x40 plate; on the way it makes the
+     document tall enough to scroll, and the scroll position survives the
+     collapse, stranding the viewport past the end of the app. */
+  .plate-box { height: 46dvh; }
 }
 
 @media (max-width: 900px) {
